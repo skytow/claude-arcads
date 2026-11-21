@@ -155,8 +155,9 @@ def poll_v1_video(video_id: str, timeout_sec: int = 900) -> str:
 
 def extract_dialog(generate_py: Path) -> str:
     text = generate_py.read_text()
-    # Prefer quoted speech lines from the current prompt. Supports curly and straight quotes.
-    speeches = re.findall(r"says:\s*[\"“](.*?)[\"”]", text)
+    # Prefer quoted speech lines from the current prompt. Supports curly and straight quotes,
+    # and both "She says:" / "He says:" and compact "Dialogue:" beat labels.
+    speeches = re.findall(r"(?:says|dialogue):\s*[\"“](.*?)[\"”]", text, flags=re.I)
     if speeches:
         return "\n".join(s.strip() for s in speeches if s.strip())
     match = re.search(r'PROMPT\s*=\s*"""(.*?)"""', text, re.S)

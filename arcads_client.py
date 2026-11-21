@@ -1,7 +1,18 @@
-import requests, time, os, subprocess
-from dotenv import load_dotenv
+import requests, time, os, subprocess, shutil
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ModuleNotFoundError:
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key, value)
 
 AUTH = os.getenv("ARCADS_KEY")
 PRODUCT_ID = os.getenv("ARCADS_PRODUCT_ID")
@@ -10,10 +21,16 @@ HEADERS = {"Authorization": AUTH, "Content-Type": "application/json"}
 
 
 def get_ffmpeg():
-    return subprocess.run(
+    exe = subprocess.run(
         ["python3", "-c", "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"],
         capture_output=True, text=True
     ).stdout.strip()
+    if exe:
+        return exe
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    raise RuntimeError("ffmpeg not found: install imageio_ffmpeg or put ffmpeg on PATH")
 
 
 def upload_file(filepath, filetype):
@@ -40,10 +57,14 @@ def generate_video(prompt, duration, ref_images=None, ref_videos=None, aspect_ra
     r = requests.post(f"{BASE}/v2/videos/generate", headers=HEADERS, json=payload)
     d = r.json()
     print(f"  Job ID: {d.get('id')} | Credits: {d.get('data', {}).get('creditsCharged', '?')}", flush=True)
+    if not d.get("id"):
+        print(f"  Arcads response: {d}", flush=True)
     return d.get("id"), d.get("data", {}).get("creditsCharged", "?")
 
 
 def poll(asset_id, label="Generating"):
+    if not asset_id:
+        raise RuntimeError(f"No Arcads asset id returned for {label}; refusing to poll /v1/assets/None")
     while True:
         time.sleep(30)
         r = requests.get(f"{BASE}/v1/assets/{asset_id}", headers=HEADERS)

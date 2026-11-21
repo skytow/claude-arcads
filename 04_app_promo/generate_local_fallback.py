@@ -244,10 +244,43 @@ def mux_audio(video: Path, audio: Path, output: Path, duration: float) -> None:
 
 
 def transcript_excerpt(ref_dir: Path, fallback: str) -> str:
+    """Return spoken reference text only; omit source handles/platform metadata.
+
+    Staged transcript files often begin with local provenance such as TikTok
+    filenames or @handles. Downstream Sintra may reuse this field for captions,
+    so keep it free of competitor/platform residue.
+    """
     transcript = ref_dir / 'transcript.txt'
     if transcript.exists():
-        return re.sub(r'\s+', ' ', transcript.read_text(errors='replace')).strip()[:200]
-    return fallback[:200]
+        text = transcript.read_text(errors='replace')
+        match = re.search(
+            r'(?:Raw transcript|Transcript):\s*(.*?)(?:\n\s*(?:Hook|Beats|CTA|Visual scan|Visible text|Competitor residue)\b|$)',
+            text,
+            flags=re.I | re.S,
+        )
+        if match:
+            cleaned = match.group(1)
+        else:
+            skip = (
+                'Reference:',
+                'Platform/source:',
+                'App:',
+                'Threshold check:',
+                'Duration/aspect:',
+                'Duration:',
+                'Hook ',
+                'Beats:',
+                'CTA:',
+                'Visual scan',
+                'Visible text',
+                'Competitor residue',
+            )
+            cleaned = '\n'.join(
+                line for line in text.splitlines()
+                if line.strip() and not line.lstrip().startswith(skip) and not line.lstrip().startswith('-')
+            )
+        return re.sub(r'\s+', ' ', cleaned).strip()[:200]
+    return re.sub(r'\s+', ' ', fallback).strip()[:200]
 
 
 def metadata_for(output: Path, app_name: str, ref_dir: Path, script: str) -> Dict[str, Any]:
